@@ -1,0 +1,1 @@
+GEN_CSRCS += lv_font_ArchitectsDaughter_32.c lv_font_Alatsi_Regular_16.c
