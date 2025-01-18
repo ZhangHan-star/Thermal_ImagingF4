@@ -83,6 +83,8 @@ void GrayToPseColor(uint8_t grayValue, uint8_t* colorR, uint8_t* colorG, uint8_t
     *colorB = 0;
   }
 }
+
+static int32_t float_to_1220(float value);
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -239,16 +241,20 @@ float MinTemp = 0;
 uint8_t return1,return2;
 
 uint8_t flag0=0,flag1=0,flagtime=0;
-//分八行插值用
-float32_t temp_raw_buffer[32*24]={0};//存放原始数据,
-float32_t temp_interp_buffer[320*30]={0};//存放插值后数据
-arm_bilinear_interp_instance_f32 bilinearInterp;
-uint8_t TemptNorma[320*30];
-static union color color_temp;
-static uint16_t Picter[320*30];
-uint8_t R,G,B;
+//浮点插值用
+// float32_t temp_raw_buffer[32*24]={0};//存放原始数据,
+// float32_t temp_interp_buffer[320*30]={0};//存放插值后数据
+// arm_bilinear_interp_instance_f32 bilinearInterp;
+// uint8_t TemptNorma[320*30];
+// static union color color_temp;
+// static uint16_t Picter[320*30];
+// uint8_t R,G,B;
 
-
+int16_t temp_raw_buffer[32*24]={0};
+int16_t temp_interp_buffer[320*30]={0};//存放插值后数据
+arm_bilinear_interp_instance_q15 bilinearInterp;
+union color color_temp;//用于色彩转换的共用体
+uint8_t R,G,B;//暂存RGB数据
 
 
 /**
@@ -268,6 +274,8 @@ void StartReadMLX_Task(void const * argument)
   /* Infinite loop */
   for(;;)
   {
+    uint32_t test=0;
+    test=float_to_1220(2.5f);
 
     char str[50];
     return1=0;
@@ -301,17 +309,65 @@ void StartReadMLX_Task(void const * argument)
       sprintf(str, "MAX:%1.f,MIN:%1.f",MaxTemp,MinTemp);
       ST7789_WriteString(0,220,str,Font_11x18,WHITE,BLACK);
 
-
+      //上下翻转图像
+      // for (uint8_t h = 0; h < 24; h++)
+      // {
+      //   for (uint8_t w = 0; w < 32; w++)
+      //   {
+      //     temp_raw_buffer[(23-h)*32+w] = Temp[h*32+w];
+      //   }
+      // }
       for (uint8_t h = 0; h < 24; h++)
       {
         for (uint8_t w = 0; w < 32; w++)
         {
-          temp_raw_buffer[(23-h)*32+w] = Temp[h*32+w];
+          temp_raw_buffer[(23-h)*32+w] = (Temp[h*32+w]* 100);
         }
       }
+      /**********************int16_t插值************************************************************************** */
+      bilinearInterp.numCols = 32;
+      bilinearInterp.numRows = 24;
+      bilinearInterp.pData = temp_raw_buffer;
 
+      for (uint16_t num = 0; num < 8; num++)
+      {
+        //插值计算
+        for (uint16_t h = 0; h < 30; h++)
+        {
+          for (uint16_t w = 0; w < 320; w++)
+          {
+            temp_interp_buffer[h*320 + w] = arm_bilinear_interp_q15(&bilinearInterp, float_to_1220((float32_t)w / 10.29032258064516f), float_to_1220((float32_t)(h+num*30) / 10.39130434782609f));
+          }
+        }
+        //归一化
+        for (uint16_t h = 0; h < 30; h++)
+        {
+          for (uint16_t w = 0; w < 320; w++)
+          {
+            temp_interp_buffer[h*320 + w] = (int16_t)(((float)temp_interp_buffer[h*320 + w]/100.0f - MinTemp) / (MaxTemp - MinTemp) * 255);
+          }
+        }
 
-      /**********************float插值************************************************************************** */
+        for (uint16_t h = 0; h < 30; h++)
+        {
+          for (uint16_t w = 0; w < 320; w++)
+          {
+            GrayToPseColor((uint8_t)temp_interp_buffer[h*320 + w], &R,&G,&B);
+            color_temp.r = R;
+            color_temp.g = G;
+            color_temp.b = B;
+            temp_interp_buffer[h*320 + w] = color_temp.raw;
+          }
+        }
+        //大小端转换
+        for (uint16_t i = 0; i < (320*30); i++)
+        {
+          temp_interp_buffer[i] = (temp_interp_buffer[i]<<8 | temp_interp_buffer[i]>>8);
+        }
+        ST7789_DrawImage(0, num*30, 320, 30, (uint16_t *)temp_interp_buffer);
+      }
+      /*********************************************************************************************************** */
+      /**********************float插值************************************************************************** *
       bilinearInterp.numCols = 32;
       bilinearInterp.numRows = 24;
       bilinearInterp.pData = temp_raw_buffer;
@@ -510,5 +566,18 @@ void StartReadMLX_Task(void const * argument)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
-
+/**
+ * @brief  float格式的数据转换为12.20格式的数据
+ *
+ * @param value
+ * @return int32_t
+ */
+int32_t float_to_1220(float value)
+{
+  int32_t intValue = (int32_t)value;
+  int32_t fracValue = 0;
+  float fracPart = value - (float)intValue;
+  if ( fracPart > 0)fracValue = (int32_t)(fracPart * 1024);
+  return (int32_t)(intValue << 20) + fracValue;
+}
 /* USER CODE END Application */
