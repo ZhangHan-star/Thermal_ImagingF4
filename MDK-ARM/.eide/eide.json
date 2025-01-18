@@ -282,7 +282,11 @@
         "../lvgl/examples/arduino",
         "../../../../../keil5ziliao/ARM/CMSIS/5.9.0/CMSIS/DSP/Examples",
         "<virtual_root>/Application/User/Core/syscalls.c",
-        "<virtual_root>/Application/User/Core/sysmem.c"
+        "<virtual_root>/Application/User/Core/sysmem.c",
+        "../lvgl/examples",
+        "../lvgl/src",
+        "../UI/custom",
+        "../UI/generated"
       ],
       "toolchain": "AC6",
       "compileConfig": {
@@ -430,7 +434,7 @@
             "output-debug-info": "enable"
           },
           "c/cpp-compiler": {
-            "optimization": "level-image-size",
+            "optimization": "level-0",
             "language-c": "c99",
             "language-cpp": "c++11",
             "warnings": "ac5-like-warnings"
